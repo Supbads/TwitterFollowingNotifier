@@ -1,18 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Newtonsoft.Json;
+using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using System.Diagnostics.CodeAnalysis;
 
 namespace TwitterFollowism
 {
     class Program
     {
         private static DiscordBot _bot;
-        const bool goBack = true;
-        
         static string dir = string.Empty;
         static DiscordConfigJson discordConfig;
         static TwitterApiConfig twitterApiConfig;
@@ -32,7 +28,7 @@ namespace TwitterFollowism
                 if (string.IsNullOrEmpty(usersToTrack))
                 {
                     usersToTrackArr = savedRecords.UserAndFriends.Keys.ToArray();
-                    if(usersToTrackArr.Length == 0)
+                    if (usersToTrackArr.Length == 0)
                     {
                         Console.WriteLine("Cannot read from saved records as they are empty");
                     }
@@ -51,7 +47,7 @@ namespace TwitterFollowism
             }
 
             twitterApiConfig.UsersToTrack = usersToTrackArr;
-            
+
             await SetupDiscordBot(discordConfig);
 
             var twitterBot = new TwitterApiBot(_bot, twitterApiConfig, savedRecords);
@@ -92,26 +88,13 @@ namespace TwitterFollowism
 
             var savedRecordsRoute = $"{dir}savedRecords.json";
             var savedRecordsStr = File.ReadAllText(savedRecordsRoute);
-            savedRecords = JsonConvert.DeserializeObject<SavedRecords>(savedRecordsStr);
+            savedRecords = JsonConvert.DeserializeObject<SavedRecords>(savedRecordsStr) ?? new SavedRecords();
 
             var twitterApiConfigRoute = $"{dir}twitterApiConfig.json";
             var twitterApiCfg = File.ReadAllText(twitterApiConfigRoute);
             twitterApiConfig = JsonConvert.DeserializeObject<TwitterApiConfig>(twitterApiCfg);
             twitterApiConfig.SavedRecordsRoute = savedRecordsRoute;
 
-        }
-
-        public class CustomComparer : IEqualityComparer<string>
-        {
-            public bool Equals([AllowNull] string x, [AllowNull] string y)
-            {
-                return string.Equals(x, y, StringComparison.OrdinalIgnoreCase);
-            }
-
-            public int GetHashCode([DisallowNull] string obj)
-            {
-                return obj.ToLower().GetHashCode();
-            }
         }
     }
 }

@@ -20,7 +20,7 @@ namespace TwitterFollowism
         private readonly string TwitterAccountLink = "https://twitter.com/{0}";
 
 
-        private const int DelayMs = 10000;
+        private const int DelayMs = 900000; // 15 mins
 
         public TwitterApiBot(DiscordBot discordBot,
             TwitterApiConfig config,
@@ -125,13 +125,13 @@ namespace TwitterFollowism
             foreach (var newFriend in newFriends)
             {
                 var newFriendDetails = usersMap[newFriend];
-                discordMessages.Add($"@here User - {user} Followed: {newFriendDetails.Username} ({newFriendDetails.Name}) . {string.Format(TwitterAccountLink, newFriendDetails.Username)}");
+                discordMessages.Add($"@here {user} Followed: {newFriendDetails.Username} ({newFriendDetails.Name}) . {string.Format(TwitterAccountLink, newFriendDetails.Username)}");
             }
 
             foreach (var removedFriend in removedFriends)
             {
                 var removedFriendDetails = usersMap[removedFriend];
-                discordMessages.Add($"@here User - {user} Followed: {removedFriendDetails.Username} ({removedFriendDetails.Name}) . {string.Format(TwitterAccountLink, removedFriendDetails.Username)}");
+                discordMessages.Add($"@here {user} UnFollowed: {removedFriendDetails.Username} ({removedFriendDetails.Name}) . {string.Format(TwitterAccountLink, removedFriendDetails.Username)}");
             }
 
             var sucessful = false;
@@ -160,7 +160,26 @@ namespace TwitterFollowism
 
         private async Task<(string user, HashSet<long> friends)> GetUserFriends(string user)
         {
-            var respRaw = await this._client.GetStringAsync(string.Format(_userFriendsReqStr, user));
+            string respRaw = "";
+            bool completed = false;
+            while (!completed)
+            {
+                try
+                {
+                    respRaw = await this._client.GetStringAsync(string.Format(_userFriendsReqStr, user));
+                    completed = true;
+                }
+                catch(Exception ex)
+                {
+                    if(!ex.Message.Contains("Too many"))
+                    {
+                        Console.WriteLine(ex.Message);
+                    }
+                }
+
+                await Task.Delay(10000);
+            }
+
             var response = JsonConvert.DeserializeObject<TwitterFriendsResponse>(respRaw);
 
             return (user, response.ids);
