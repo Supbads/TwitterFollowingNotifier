@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
+using static TwitterFollowism.Models.Enums;
 
 namespace TwitterFollowism
 {
@@ -15,12 +16,14 @@ namespace TwitterFollowism
         private readonly DiscordBot _discordBot;
         private readonly SavedRecords _savedRecords;
 
-        private readonly string _userRequestUrl = @"https://api.twitter.com/2/users?ids={0}"; // templated
-        private readonly string _userFriendsReqStr;
-        private readonly string TwitterAccountLink = "https://twitter.com/{0}";
+        private object lockObj = new object();
 
+        private const string _userRequestUrl = @"https://api.twitter.com/2/users?ids={0}";
+        private const string _userFriendsReqStr = @"https://api.twitter.com/1.1/friends/ids.json?screen_name={0}";
+        private const string TwitterAccountLink = @"https://twitter.com/{0}";
+        private const string GetUserByUsername = @"https://api.twitter.com/2/users/by/username/{0}";
 
-        private const int DelayMs = 900000; // 15 mins
+        private const int DelayMs = 1000000; // 15 mins
 
         public TwitterApiBot(DiscordBot discordBot,
             TwitterApiConfig config,
@@ -36,12 +39,21 @@ namespace TwitterFollowism
             this._config = config;
             this._discordBot = discordBot;
             this._savedRecords = savedEntities;
-            //this._userFriendsReqStr = @$"https://api.twitter.com/1.1/friends/ids.json?screen_name={string.Join(',', config.UsersToTrack)}";
-            this._userFriendsReqStr = @"https://api.twitter.com/1.1/friends/ids.json?screen_name={0}";
+        }
+
+        public string[] GetCurrentlyTrackedUsers()
+        {
+            return this._config.UsersToTrack.ToArray();
         }
 
         public async Task Run()
         {
+            this._discordBot.ConfigureTwitterApi(this);
+            if (this._config.UsersToTrack.Contains("skip"))
+            {
+                this._config.UsersToTrack.Clear();
+            }
+
             await InitUsers();
 
             while (true)
@@ -67,8 +79,8 @@ namespace TwitterFollowism
                     }
 
                     await SendDiscordMessages(user, newFriends, removedFriends, friendsChanges);
-
                     this._savedRecords.UserAndFriends[user] = newUserFriends;
+                    PersistSavedRecordsBlocking();
                 }
 
                 await Task.Delay(DelayMs);
@@ -83,7 +95,7 @@ namespace TwitterFollowism
                 .Where(user => !_savedRecords.IsInitialSetup.ContainsKey(user) || _savedRecords.IsInitialSetup[user])
                 .ToArray();
 
-            if(usersToInit.Any())
+            if (usersToInit.Any())
                 Console.WriteLine($"Reinitializing users: {string.Join(',', usersToInit)}");
 
             var initUsersTasks = await Task.WhenAll(usersToInit.Select(x => GetUserFriends(x)).ToArray());
@@ -114,6 +126,92 @@ namespace TwitterFollowism
             {
                 PersistSavedRecordsBlocking();
             }
+        }
+
+        public AddUserCode ContinueTrackingUser(string user)
+        {
+            if (this._config.UsersToTrack.Contains(user))
+            {
+                return AddUserCode.AlreadyAdded;
+            }
+
+            if (!this._savedRecords.UserAndFriends.ContainsKey(user))
+            {
+                return AddUserCode.NotConfigured;
+            }
+
+            this._config.UsersToTrack.Add(user);
+            return AddUserCode.Success;
+        }
+
+        public async Task<AddUserCode> AddUser(string user)
+        {
+            if (this._config.UsersToTrack.Contains(user) || this._savedRecords.UserAndFriends.ContainsKey(user))
+            {
+                return AddUserCode.AlreadyAdded;
+            }
+
+            var userExists = await UserExistsByUsername(user);
+            if (!userExists)
+            {
+                return AddUserCode.DoesNotExist;
+            }
+
+            if (!this._savedRecords.UserAndFriends.ContainsKey(user))
+            {
+                this._savedRecords.UserAndFriends.Add(user, new HashSet<long>());
+            }
+            this._config.UsersToTrack.Add(user);
+
+            if (!this._savedRecords.IsInitialSetup.ContainsKey(user))
+            {
+                this._savedRecords.IsInitialSetup.Add(user, true);
+            }
+
+            var friends = await GetUserFriends(user);
+            this._savedRecords.UserAndFriends[user] = friends.friends;
+            this._savedRecords.IsInitialSetup[user] = false;
+
+            PersistSavedRecordsBlocking();
+            return AddUserCode.Success;
+        }
+
+        public RemoveUserCode RemoveUser(string user)
+        {
+            var userExists = this._config.UsersToTrack.Contains(user) || this._savedRecords.UserAndFriends.ContainsKey(user);
+
+            if (this._config.UsersToTrack.Contains(user))
+            {
+                this._config.UsersToTrack.Remove(user);
+            }
+
+            if (this._savedRecords.IsInitialSetup.ContainsKey(user))
+            {
+                this._savedRecords.IsInitialSetup.Remove(user);
+            }
+
+            if (this._savedRecords.UserAndFriends.ContainsKey(user))
+            {
+                this._savedRecords.UserAndFriends.Remove(user);
+            }
+
+            if (userExists)
+            {
+                return RemoveUserCode.Success;
+            }
+
+            return RemoveUserCode.WasNotConfigured;
+        }
+
+        public RemoveUserCode StopTrackingUser(string user)
+        {
+            if (!this._config.UsersToTrack.Contains(user))
+            {
+                return RemoveUserCode.WasNotConfigured;
+            }
+
+            this._config.UsersToTrack.Remove(user);
+            return RemoveUserCode.Success;
         }
 
         private async Task SendDiscordMessages(string user, long[] newFriends, long[] removedFriends, long[] friendsChanges)
@@ -155,7 +253,10 @@ namespace TwitterFollowism
 
         private void PersistSavedRecordsBlocking()
         {
-            File.WriteAllText(this._config.SavedRecordsRoute, JsonConvert.SerializeObject(this._savedRecords));
+            lock (lockObj)
+            {
+                File.WriteAllText(this._config.SavedRecordsRoute, JsonConvert.SerializeObject(this._savedRecords));
+            }
         }
 
         private async Task<(string user, HashSet<long> friends)> GetUserFriends(string user)
@@ -169,20 +270,34 @@ namespace TwitterFollowism
                     respRaw = await this._client.GetStringAsync(string.Format(_userFriendsReqStr, user));
                     completed = true;
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
-                    if(!ex.Message.Contains("Too many"))
+                    if (!ex.Message.Contains("Too many"))
                     {
                         Console.WriteLine(ex.Message);
                     }
-                }
 
-                await Task.Delay(10000);
+                    await Task.Delay(DelayMs / _config.UsersToTrack.Count);
+                }
             }
 
             var response = JsonConvert.DeserializeObject<TwitterFriendsResponse>(respRaw);
 
             return (user, response.ids);
+        }
+
+        private async Task<bool> UserExistsByUsername(string username)
+        {
+            try
+            {
+                var respRaw = await this._client.GetStringAsync(string.Format(GetUserByUsername, username));
+                var twitterUsersResp = JsonConvert.DeserializeObject<TwitterUserLookupByNameResp>(respRaw);
+                return twitterUsersResp.Data != null;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private async Task<Dictionary<long, TwitterUser>> GetUsersBasicDataByIds(long[] userIds)

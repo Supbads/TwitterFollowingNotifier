@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -20,15 +21,15 @@ namespace TwitterFollowism
 
             // todo handle default e.g. should read saved entities first
             // clean @ if it starts with it
-            string[] usersToTrackArr = new string[0];
+            HashSet<string> usersToTrackArr = new HashSet<string>();
             while (!usersToTrackArr.Any())
             {
                 Console.WriteLine("Enter users to track. Will track existing ones by default");
                 var usersToTrack = Console.ReadLine();
                 if (string.IsNullOrEmpty(usersToTrack))
                 {
-                    usersToTrackArr = savedRecords.UserAndFriends.Keys.ToArray();
-                    if (usersToTrackArr.Length == 0)
+                    usersToTrackArr = savedRecords.IsInitialSetup.Keys.ToHashSet();
+                    if (usersToTrackArr.Count == 0)
                     {
                         Console.WriteLine("Cannot read from saved records as they are empty");
                     }
@@ -37,9 +38,9 @@ namespace TwitterFollowism
                 {
                     usersToTrackArr = usersToTrack.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries)
                         .Select(userToTrack => userToTrack.Replace("@", ""))
-                        .ToArray();
+                        .ToHashSet();
 
-                    if (usersToTrackArr.Length == 0)
+                    if (usersToTrackArr.Count == 0)
                     {
                         Console.WriteLine("Please input valid users separated by ',' or whitespace");
                     }
@@ -47,6 +48,7 @@ namespace TwitterFollowism
             }
 
             twitterApiConfig.UsersToTrack = usersToTrackArr;
+            Console.WriteLine($"Starting to track {string.Join(',', usersToTrackArr)}");
 
             await SetupDiscordBot(discordConfig);
 
