@@ -218,7 +218,7 @@ namespace TwitterFollowism
         {
             List<string> discordMessages = new List<string>(friendsChanges.Length);
 
-            var usersMap = await GetUsersBasicDataByIds(friendsChanges);
+            var usersMap = await GetUsersBasicDataByIds(user, friendsChanges);
 
             foreach (var newFriend in newFriends)
             {
@@ -228,8 +228,15 @@ namespace TwitterFollowism
 
             foreach (var removedFriend in removedFriends)
             {
-                var removedFriendDetails = usersMap[removedFriend];
-                discordMessages.Add($"@here {user} UnFollowed: {removedFriendDetails.Username} ({removedFriendDetails.Name}) . {string.Format(TwitterAccountLink, removedFriendDetails.Username)}");
+                if (!usersMap.ContainsKey(removedFriend))
+                {
+                    discordMessages.Add($"@here {user} UnFollowed: twitter account: {removedFriend} which does not exist anymore");
+                }
+                else
+                {
+                    var removedFriendDetails = usersMap[removedFriend];
+                    discordMessages.Add($"@here {user} UnFollowed: {removedFriendDetails.Username} ({removedFriendDetails.Name}) . {string.Format(TwitterAccountLink, removedFriendDetails.Username)}");
+                }
             }
 
             var sucessful = false;
@@ -300,11 +307,19 @@ namespace TwitterFollowism
             }
         }
 
-        private async Task<Dictionary<long, TwitterUser>> GetUsersBasicDataByIds(long[] userIds)
+        private async Task<Dictionary<long, TwitterUser>> GetUsersBasicDataByIds(string user, long[] userIds)
         {
-            var respRaw = await this._client.GetStringAsync(string.Format(_userRequestUrl, string.Join(',', userIds)));
-            var twitterUsersResp = JsonConvert.DeserializeObject<TwitterUsersLookupResp>(respRaw);
-            return twitterUsersResp.Data.ToDictionary(x => x.Id, x => x);
+            try
+            {
+                var respRaw = await this._client.GetStringAsync(string.Format(_userRequestUrl, string.Join(',', userIds)));
+                var twitterUsersResp = JsonConvert.DeserializeObject<TwitterUsersLookupResp>(respRaw);
+                return twitterUsersResp.Data.ToDictionary(x => x.Id, x => x);
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine($"Error when fetching {user}'s friends changes: {string.Join(',', userIds)} {ex.Message}");
+                return new Dictionary<long, TwitterUser>();
+            }
         }
     }
 }

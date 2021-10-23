@@ -20,7 +20,9 @@ namespace TwitterFollowism
         const string AddUserCommand = ".add user";
         const string StopUserCommand = ".stop user";
         const string ContinueUserCommand = ".continue user";
-            
+        const string HelpCommand = ".help";
+        
+        const ulong TwitterGuildId = 405359801154142208;
 
         public DiscordBot(DiscordConfigJson configParsed)
         {
@@ -69,7 +71,7 @@ namespace TwitterFollowism
                     await context.Channel.SendMessageAsync("pong");
                     return;
                 }
-                else if (message.Content.Equals(".help", StringComparison.InvariantCultureIgnoreCase))
+                else if (message.Content.Equals(HelpCommand, StringComparison.InvariantCultureIgnoreCase))
                 {
                     await context.Channel.SendMessageAsync(
                         $"{AddUserCommand} <username> - Adds a user to the track list" + "\n" +
@@ -176,10 +178,15 @@ namespace TwitterFollowism
             var sendChannelsMessagesTasks = new List<Task<RestUserMessage>>();
             foreach (var guild in this._client.Guilds)
             {
-                if (guild.Id == 897168415691780118)
+                if(guild.Id == TwitterGuildId)
                 {
-                    sendChannelsMessagesTasks.Add(guild.GetTextChannel(897641608386863124).SendMessageAsync($"<@&897180966597033984> Testing potential scrapes {message}"));
+                    const ulong TwitterFollowStalkChannel = 901407273686028338;
+                    sendChannelsMessagesTasks.Add(guild.GetTextChannel(TwitterFollowStalkChannel).SendMessageAsync(message));
                 }
+                //else if (guild.Id == 897168415691780118)
+                //{
+                //    sendChannelsMessagesTasks.Add(guild.GetTextChannel(897641608386863124).SendMessageAsync($"<@&897180966597033984> Testing potential scrapes {message}"));
+                //}
 
                 sendChannelsMessagesTasks.Add(guild.DefaultChannel.SendMessageAsync(message));
             }
