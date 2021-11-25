@@ -16,10 +16,10 @@
 
         // @account name
         public string Username { get; set; }
+    }
 
-
-        //"id": "2419086217",
-        //"name": "dΞfacΞr",
-        //"username": "_defacer"
+    public class TwitterUserLookupByNameResp
+    {
+        public TwitterUser Data { get; set; }
     }
 }

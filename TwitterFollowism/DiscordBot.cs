@@ -182,10 +182,12 @@ namespace TwitterFollowism
                 {
                     const ulong TwitterFollowStalkChannel = 901407273686028338;
                     sendChannelsMessagesTasks.Add(guild.GetTextChannel(TwitterFollowStalkChannel).SendMessageAsync(message));
+                    continue;
                 }
                 //else if (guild.Id == 897168415691780118)
                 //{
                 //    sendChannelsMessagesTasks.Add(guild.GetTextChannel(897641608386863124).SendMessageAsync($"<@&897180966597033984> Testing potential scrapes {message}"));
+                //    continue;
                 //}
 
                 sendChannelsMessagesTasks.Add(guild.DefaultChannel.SendMessageAsync(message));
